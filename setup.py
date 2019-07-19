@@ -13,7 +13,7 @@ install_reqs = parse_requirements("requirements.txt", session=uuid.uuid1())
 reqs = [str(ir.req) for ir in install_reqs]
 
 setup(
-    name='AIDS Data Repository Libraries',
+    name='adx_lib',
     version='0.0.1',
     long_description=__doc__,
     packages=find_packages(),
