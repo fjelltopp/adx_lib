@@ -16,7 +16,7 @@ pjnz_directory = '../../../'
 
 pjnz = PJNZFile(pjnz_directory+'Malawi_2019_v22.PJNZ')
 
-
+#pjnz.epp_subpop()
 # pjnz.extract_surv_data()
 
 # pjnz.dp_tables = {
@@ -39,8 +39,12 @@ pjnz = PJNZFile(pjnz_directory+'Malawi_2019_v22.PJNZ')
 #     schemas_directory + 'spectrum_anc_test.json'
 # ).create_csv_table(pjnz)
 #
-spectrum_tables.ANCPrevalenceTable(
-    schemas_directory + 'spectrum_anc_prev.json'
+# spectrum_tables.ANCPrevalenceTable(
+#     schemas_directory + 'spectrum_anc_prev.json'
+# ).create_csv_table(pjnz)
+
+spectrum_tables.HHTable(
+    schemas_directory + 'spectrum_hh.json'
 ).create_csv_table(pjnz)
 #
 # spectrum_tables.PMTCTTable(

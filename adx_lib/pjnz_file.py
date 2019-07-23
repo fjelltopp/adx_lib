@@ -18,7 +18,6 @@ rpackages.importr("specio")
 pandas2ri.activate()
 
 
-
 class PJNZFile():
 
     # Determines the files in the PJNZ that we want to import to Pandas
@@ -26,15 +25,6 @@ class PJNZFile():
     file_suffixes = {
         '.DP': {'dtype': str}
     }
-    surv_file_datasheets = [
-        #"POPULATION SIZES for:",
-        #"ANC-SS DATA for:",
-        "ANC-SS DATA (PREV & NUMBER SEPARATE) for:",
-        #"ANC-RT DATA for:",
-        "ANC-RT DATA (PREV & NUMBER SEPARATE) for:",
-        #"ANC-RT CENSUS DATA for:",
-        #"SURVEY DATA for:",
-    ]
     year_range = map(lambda x: str(x), range(1970, 2026))
     default_columns = year_range
 
@@ -46,6 +36,8 @@ class PJNZFile():
         self.fname = fpath.split('/')[-1][:-5]  # fName w/o path or extension
         self.file_suffixes = file_suffixes
         self.pjnz_file = zipfile.PyZipFile(fpath)
+        self.epp_data = {}
+        self.dp_tables = {}
         if country:
             self.country = country
         else:
@@ -68,13 +60,65 @@ class PJNZFile():
                 **kwargs
             )
 
-    def _extract_epp_data(self):
+    def epp_subpop(self):
+        epp_data = r['read_spu'](self.fpath)
+        print(epp_data)
+        print('art_spu')
+
+    def epp(self, table):
         """
         Uses the R package SpecIO, developed at Imperial, to import some of the
         data from the Spectrum file.
         """
-        self.epp_data = r['read_epp_data'](self.fpath)
-        return self.epp_data
+
+        # Details the R functions available and tables of data they export.
+        epp_functions = {
+            "read_epp_data": [
+                'anc.prev',
+                'anc.n',
+                'ancrtsite.prev',
+                'ancrtsite.n',
+                'hhs'
+            ],
+            "read_epp_subpop": [
+
+            ]
+        }
+
+        # Utility function to convert an R matrix into a pandas dataframe
+        def r2df(r_matrix):
+            dataframe = pandas2ri.ri2py_dataframe(r_matrix)
+            dataframe.columns = r_matrix.colnames
+            dataframe.index = r_matrix.rownames
+            return dataframe
+
+        # Determines the R function to call, given the requested table
+        def get_function(table):
+            for function, tables in epp_functions.iteritems():
+                if table in tables:
+                    return function
+
+        # Combines data for each region into one complete data set.
+        def combine_regions(table_name, epp_data):
+            complete_data = {}
+            for region in epp_data.names:
+                data_frame = r2df(epp_data.rx2(region).rx2(table_name))
+                data_frame['Region'] = region
+                complete_data[region] = data_frame
+            return pandas.concat(complete_data.values())
+
+        # Only import if we havn't already done so.
+        if self.epp_data.get(table, None) is None:
+
+            # Call the relavent R function to get the data
+            function = get_function(table)
+            epp_data = r[function](self.fpath)
+
+            # Import data for every table we are interested in
+            for table_name in epp_functions[function]:
+                self.epp_data[table_name] = combine_regions(table_name, epp_data)
+
+        return self.epp_data[table]
 
     def dp(self, tag, type=None, columns=None):
         """

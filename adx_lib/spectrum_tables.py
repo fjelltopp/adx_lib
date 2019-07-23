@@ -24,7 +24,7 @@ def build_spectrum_table(spectrum_file, schema, index=None, **kwargs):
         the cleanest way to store the complex mapping of data from PJNZ to ADR
         resource.
         """
-        # We reference the spectrum file a lot, so give it a shorthand ref
+        # We reference the spectrum file from json schemas - give it a shorthand ref
         sf = spectrum_file
 
         # Remove the first schema field as this is the header/index
@@ -49,8 +49,14 @@ def build_spectrum_table(spectrum_file, schema, index=None, **kwargs):
                 new_table[field['name']] = data_series
 
             else:
-                # If no spectrum_file_key given, then leave row empty
-                new_table[field['name']] = [np.NAN]*len(sf.year_range)
+                # If no spectrum_file_key given, then leave series empty
+                new_table[field['name']] = []
+
+        # Fill in empty series with NAN (must match other series length)
+        max_length = max([len(x) for x in new_table.values()])
+        for key, value in new_table.iteritems():
+            if len(value) == 0:
+                new_table[key] = [np.NaN]*max_length
 
         new_table = pd.DataFrame.from_dict(
             new_table,
@@ -60,20 +66,47 @@ def build_spectrum_table(spectrum_file, schema, index=None, **kwargs):
         # Fix the indicies if they are mannually specified
         if index:
             new_table.index = index
+        # Fix the indicies if they are specified with a spectrum_file_key
+        elif first_field.get('spectrum_file_key', False):
+            new_table.index = list(eval(first_field['spectrum_file_key']))
         new_table.insert(0, first_field['name'], new_table.index)
 
         return new_table
 
+class TurnoverTable(SchemedTable):
 
-class ANCPrevalenceTable(SchemedTable):
-
-    def create_table(self, pjnz):
+    def create_table(self, spectrum_file):
         """
-        ANC Prevelance table is taken from the XML file, and loaded through
+        Conc Prevelance table is taken from the XML file, and loaded through
+        Imperial's SpecIO R Package.
+        """
+
+        print(spectrum_file)
+
+
+class HHTable(SchemedTable):
+
+    def create_table(self, spectrum_file):
+        """
+        Conc Prevelance table is taken from the XML file, and loaded through
+        Imperial's SpecIO R Package.
+        """
+
+        return build_spectrum_table(
+            spectrum_file,
+            self.schema
+        )
+
+
+class ConcPrevalenceTable(SchemedTable):
+
+    def create_table(self, spectrum_file):
+        """
+        Conc Prevelance table is taken from the XML file, and loaded through
         Imperial's SpecIO R Package.
         """
         # Use the SpecIO package to extrac epp model data.
-        epp_data = pjnz._extract_epp_data()
+        epp_data = spectrum_file.epp()
         regions = epp_data.names
         anc_prev = {}
 
@@ -86,38 +119,50 @@ class ANCPrevalenceTable(SchemedTable):
 
         # Data is stored by region in the SpecIO outputs.
         for region in regions:
+            data_types = epp_data.rx2(region).names
+            print(data_types)
+            print(_r2df(epp_data.rx2(region).rx2('ancrtcens')))
+            print(epp_data.rx2(region).rx2('anc.used'))
 
-            #  Assemble all the different pieces of data required
-            anc_ss_perc = _r2df(epp_data.rx2(region).rx2('anc.prev'))
-            anc_ss_perc['Type'] = "ANC-SS (%)"
-            anc_ss_num = _r2df(epp_data.rx2(region).rx2('anc.n'))
-            anc_ss_num['Type'] = "ANC-SS (N)"
-            anc_rt_perc = _r2df(epp_data.rx2(region).rx2('ancrtsite.prev'))
-            anc_rt_perc['Type'] = "ANC-RT (%)"
-            anc_rt_num = _r2df(epp_data.rx2(region).rx2('ancrtsite.n'))
-            anc_rt_num['Type'] = "ANC-RT (N)"
 
-            anc_region_prev = pandas.concat(
-                [anc_ss_perc, anc_ss_num, anc_rt_perc, anc_rt_num]
-            )
-            anc_region_prev['Region'] = region
-            anc_prev[region] = anc_region_prev
+class ANCPrevalenceTable(SchemedTable):
 
-        # Assemble final table from multiple regional tables
-        anc_prev = pandas.concat(anc_prev.values())
-        anc_prev['Site'] = anc_prev.index
+    def create_table(self, spectrum_file):
+        """
+        ANC Prevelance table is taken from the XML file, and loaded through
+        Imperial's SpecIO R Package.  It is quite different to the other tables
+        as data of different types from different tables are merged together
+        into a single table.  This means we first have to mannually build the
+        combined data source, before building the spectrum table.
+        """
+        # Use the SpecIO package to extrac epp model data.
+        combined_anc = {
+            "ss_perc": spectrum_file.epp('anc.prev'),
+            "ss_num": spectrum_file.epp('anc.n'),
+            "rt_perc": spectrum_file.epp('ancrtsite.prev'),
+            "rt_num": spectrum_file.epp('ancrtsite.n')
+        }
+
+        # Merging different type of data into one table
+        combined_anc['ss_perc']['Type'] = "ANC-SS (%)"
+        combined_anc['ss_num']['Type'] = "ANC-SS (N)"
+        combined_anc['rt_perc']['Type'] = "ANC-RT (%)"
+        combined_anc['rt_num']['Type'] = "ANC-RT (N)"
+
+        combined_anc = pandas.concat(combined_anc.values())
+        combined_anc['Site'] = combined_anc.index
 
         # Many values have been set to some huge negative figure.
         # Assume these should be empty?
-        tmp = anc_prev._get_numeric_data()
+        tmp = combined_anc._get_numeric_data()
         tmp[tmp < 0] = np.NaN
 
-        # Sort the columns and the rows as desired.
-        columns = list(map(lambda x: x['name'], self.schema['fields']))
-        anc_prev = anc_prev[columns]
-        anc_prev = anc_prev.sort_values(by=['Site', 'Region'])
+        spectrum_file.epp_data['combined_anc'] = combined_anc
 
-        return anc_prev
+        return build_spectrum_table(
+            spectrum_file,
+            self.schema
+        )
 
 
 class ANCTestingTable(SchemedTable):
@@ -141,7 +186,7 @@ class ANCTestingTable(SchemedTable):
 class BreastfeedingTable(SchemedTable):
 
     def create_table(self, spectrum_file):
-        
+
         spectrum_file.dp_tables = {
             "InfantFeedingOptions MV": {
                 "type": float
@@ -225,7 +270,7 @@ class KnownStatusTable(SchemedTable):
     def create_table(self, spectrum_file):
 
         spectrum_file.dp_tables = {
-            "VrialSuppressionInput MV": {"type": int}
+            "ViralSuppressionInput MV": {"type": int}
         }
         return build_spectrum_table(
             spectrum_file,
