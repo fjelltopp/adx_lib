@@ -42,8 +42,8 @@ def build_spectrum_table(spectrum_file, schema, index=None, **kwargs):
                     data_series = list(eval(field['spectrum_file_key']))
                 except Exception:
                     logging.error(
-                        "Failed to evaluate spectrum_file_key: " +
-                        field['spectrum_file_key']
+                        "Failed to evaluate " + field['name'] +
+                        " spectrum_file_key: " + field['spectrum_file_key']
                     )
                     raise
                 new_table[field['name']] = data_series
@@ -72,6 +72,29 @@ def build_spectrum_table(spectrum_file, schema, index=None, **kwargs):
         new_table.insert(0, first_field['name'], new_table.index)
 
         return new_table
+
+
+class SizeTable(SchemedTable):
+
+    def create_table(self, spectrum_file):
+        """
+        Conc Prevelance table is taken from the XML file, and loaded through
+        Imperial's SpecIO R Package.
+        """
+        subpops = spectrum_file.epp('subpops').pivot(
+            index='Group',
+            columns='year',
+            values='pop15to49'
+        )
+        subpops.columns = subpops.columns.astype(str)
+        subpops['Group'] = subpops.index
+        spectrum_file.epp_data['subpops'] = subpops
+
+        return build_spectrum_table(
+            spectrum_file,
+            self.schema
+        )
+
 
 class TurnoverTable(SchemedTable):
 
@@ -137,18 +160,16 @@ class ANCPrevalenceTable(SchemedTable):
         """
         # Use the SpecIO package to extrac epp model data.
         combined_anc = {
-            "ss_perc": spectrum_file.epp('anc.prev'),
-            "ss_num": spectrum_file.epp('anc.n'),
-            "rt_perc": spectrum_file.epp('ancrtsite.prev'),
-            "rt_num": spectrum_file.epp('ancrtsite.n')
+            "ANC-SS (%)": spectrum_file.epp('anc.prev'),
+            "ANC-SS (N)": spectrum_file.epp('anc.n'),
+            "ANC-RT (%)": spectrum_file.epp('ancrtsite.prev'),
+            "ANC-RT (N)": spectrum_file.epp('ancrtsite.n')
         }
 
-        # Merging different type of data into one table
-        combined_anc['ss_perc']['Type'] = "ANC-SS (%)"
-        combined_anc['ss_num']['Type'] = "ANC-SS (N)"
-        combined_anc['rt_perc']['Type'] = "ANC-RT (%)"
-        combined_anc['rt_num']['Type'] = "ANC-RT (N)"
-
+        # Filtering out empty values and merging data types into one table
+        combined_anc = {k: v for k, v in combined_anc.items() if v is not None}
+        for key, value in combined_anc.iteritems():
+                value['Type'] = key
         combined_anc = pandas.concat(combined_anc.values())
         combined_anc['Site'] = combined_anc.index
 

@@ -60,11 +60,6 @@ class PJNZFile():
                 **kwargs
             )
 
-    def epp_subpop(self):
-        epp_data = r['read_spu'](self.fpath)
-        print(epp_data)
-        print('art_spu')
-
     def epp(self, table):
         """
         Uses the R package SpecIO, developed at Imperial, to import some of the
@@ -80,8 +75,8 @@ class PJNZFile():
                 'ancrtsite.n',
                 'hhs'
             ],
-            "read_epp_subpop": [
-
+            "read_epp_subpops": [
+                'subpops'
             ]
         }
 
@@ -98,26 +93,52 @@ class PJNZFile():
                 if table in tables:
                     return function
 
-        # Combines data for each region into one complete data set.
-        def combine_regions(table_name, epp_data):
+        # Combines data for each group into one complete data set.
+        def read_epp_data():
+            # Import data for every table we are interested in
+            # Data is stratified into groups which we have to combine.
+            # Groups are either regions or sub-populations depending on epidemic type.
+            epp_data = r['read_epp_data'](self.fpath)
+            for table_name in epp_functions[function]:
+                complete_data = {}
+                for group in epp_data.names:
+                    try:
+                        data_frame = r2df(epp_data.rx2(group).rx2(table_name))
+                        data_frame['Group'] = group
+                        complete_data[group] = data_frame
+                    except TypeError:
+                        pass
+
+                if complete_data.values():
+                    self.epp_data[table_name] = pandas.concat(complete_data.values())
+                else:
+                    self.epp_data[table_name] = None
+
+        # Combines data for each group into one complete data set.
+        def read_epp_subpops():
+            epp_subpops = r['read_epp_subpops'](self.fpath)
             complete_data = {}
-            for region in epp_data.names:
-                data_frame = r2df(epp_data.rx2(region).rx2(table_name))
-                data_frame['Region'] = region
-                complete_data[region] = data_frame
-            return pandas.concat(complete_data.values())
+
+            for group in epp_subpops.rx2('subpops').names:
+                try:
+                    data_frame = r2df(epp_subpops.rx2('subpops').rx2(group))
+                    data_frame['Group'] = group
+                    complete_data[group] = data_frame
+                except TypeError:
+                    pass
+
+            if complete_data.values():
+                self.epp_data['subpops'] = pandas.concat(complete_data.values())
+            else:
+                self.epp_data['subpops'] = None
 
         # Only import if we havn't already done so.
         if self.epp_data.get(table, None) is None:
-
             # Call the relavent R function to get the data
             function = get_function(table)
-            epp_data = r[function](self.fpath)
+            locals()[function]()
 
-            # Import data for every table we are interested in
-            for table_name in epp_functions[function]:
-                self.epp_data[table_name] = combine_regions(table_name, epp_data)
-
+        # Return only the requested table
         return self.epp_data[table]
 
     def dp(self, tag, type=None, columns=None):
@@ -240,7 +261,7 @@ class PJNZFile():
         #         break
         #     table = surv_sheet.copy().iloc[start_row:end_row, 0:]
         #     dataframes.append(table)
-        print(dataframes.keys())
+
         return dataframes
 
     @staticmethod

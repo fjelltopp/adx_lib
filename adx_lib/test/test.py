@@ -14,9 +14,11 @@ IT SHOULD (OF COURSE) BECOME A PROPER TEST SUIT.
 schemas_directory = '../../../ckanext-unaids/ckanext/unaids/validation_table_schemas/'
 pjnz_directory = '../../../'
 
-pjnz = PJNZFile(pjnz_directory+'Malawi_2019_v22.PJNZ')
+pjnz = PJNZFile(pjnz_directory+'Mauritius_2018_shadow.PJNZ')
 
-#pjnz.epp_subpop()
+#print(pjnz.epp('subpops'))
+
+# pjnz.epp_subpop()
 # pjnz.extract_surv_data()
 
 # pjnz.dp_tables = {
@@ -26,6 +28,10 @@ pjnz = PJNZFile(pjnz_directory+'Malawi_2019_v22.PJNZ')
 #     }
 # }
 # print(pjnz.dp('ARVRegimen MV2'))
+
+spectrum_tables.SizeTable(
+    schemas_directory + 'spectrum_size.json'
+).create_csv_table(pjnz)
 
 # spectrum_tables.ARTTable(
 #     schemas_directory + 'spectrum_art.json'
@@ -43,9 +49,9 @@ pjnz = PJNZFile(pjnz_directory+'Malawi_2019_v22.PJNZ')
 #     schemas_directory + 'spectrum_anc_prev.json'
 # ).create_csv_table(pjnz)
 
-spectrum_tables.HHTable(
-    schemas_directory + 'spectrum_hh.json'
-).create_csv_table(pjnz)
+# spectrum_tables.HHTable(
+#     schemas_directory + 'spectrum_hh.json'
+# ).create_csv_table(pjnz)
 #
 # spectrum_tables.PMTCTTable(
 #     schemas_directory + 'spectrum_pmtct.json'
