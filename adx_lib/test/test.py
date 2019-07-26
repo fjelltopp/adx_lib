@@ -16,6 +16,12 @@ pjnz_directory = '../../../'
 
 pjnz = PJNZFile(pjnz_directory+'Mauritius_2018_shadow.PJNZ')
 
+# subpops = r['read_epp_subpops'](pjnz_directory+'Mauritius_2018_shadow.PJNZ').rx2('subpops')
+# pops = subpops.names
+# for pop in pops:
+#     print("=======" + pop + "========")
+#     print(r['attributes'](subpops.rx2(pop)))
+
 #print(pjnz.epp('subpops'))
 
 # pjnz.epp_subpop()
@@ -29,9 +35,9 @@ pjnz = PJNZFile(pjnz_directory+'Mauritius_2018_shadow.PJNZ')
 # }
 # print(pjnz.dp('ARVRegimen MV2'))
 
-spectrum_tables.SizeTable(
-    schemas_directory + 'spectrum_size.json'
-).create_csv_table(pjnz)
+# spectrum_tables.SizeTable(
+#     schemas_directory + 'spectrum_size.json'
+# ).create_csv_table(pjnz)
 
 # spectrum_tables.ARTTable(
 #     schemas_directory + 'spectrum_art.json'
@@ -44,9 +50,17 @@ spectrum_tables.SizeTable(
 # spectrum_tables.ANCTestingTable(
 #     schemas_directory + 'spectrum_anc_test.json'
 # ).create_csv_table(pjnz)
-#
+
 # spectrum_tables.ANCPrevalenceTable(
 #     schemas_directory + 'spectrum_anc_prev.json'
+# ).create_csv_table(pjnz)
+
+# spectrum_tables.ConcPrevalenceTable(
+#     schemas_directory + 'spectrum_conc_prev.json'
+# ).create_csv_table(pjnz)
+
+# spectrum_tables.TurnoverTable(
+#     schemas_directory + 'spectrum_turnover.json'
 # ).create_csv_table(pjnz)
 
 # spectrum_tables.HHTable(

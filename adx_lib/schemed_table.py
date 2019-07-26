@@ -17,7 +17,7 @@ class SchemedTable:
         with open(fpath, encoding='utf-8') as read_file:
             self.schema = json.load(read_file)
 
-    def create_template(self):
+    def create_template(self, info=True):
         """
         Creates a template dataframe from the JSON schema.
         """
@@ -28,38 +28,40 @@ class SchemedTable:
 
         # Create the csv template column by column
         for f in self.schema['fields']:
+            # We'll build a column of information about the data field
+            info_values = []
+            if info:
+                # Pop enum out of constraints as we treat this seperately
+                enum = f.get('constraints', {}).pop('enum', [])
 
-            # Pop enum out of constraints as we treat this seperately
-            enum = f.get('constraints', {}).pop('enum', [])
+                # State basic field constraints
+                info_values = ["", "--conditions--", "type: "+str(f['type'])]
+                for k, v in f.get('constraints', {}).iteritems():
+                    info_values += [str(k)+": "+str(v)]
 
-            # State basic field constraints
-            default_values = ["", "--conditions--", "type: "+str(f['type'])]
-            for k, v in f.get('constraints', {}).iteritems():
-                default_values += [str(k)+": "+str(v)]
+                # List possible values if enum field
+                if enum:
+                    info_values += ["", "--restricted values--"] + enum
 
-            # List possible values if enum field
-            if enum:
-                default_values += ["", "--restricted values--"] + enum
+                # Detail any foreign references
+                if f['name'] in foreign_keys.keys():
+                    info_values += [
+                        "",
+                        "--foreign key--",
+                        "field: " + str(foreign_keys[f['name']]['reference']['fields']),
+                        "resource: " + str(foreign_keys[f['name']]['reference']['resource']),
+                    ]
 
-            # Detail any foreign references
-            if f['name'] in foreign_keys.keys():
-                default_values += [
-                    "",
-                    "--foreign key--",
-                    "field: " + str(foreign_keys[f['name']]['reference']['fields']),
-                    "resource: " + str(foreign_keys[f['name']]['reference']['resource']),
-                ]
-
-            # Specify whether the field contributes to a key of some sort
-            if f['name'] == self.schema.get('primaryKey', ""):
-                default_values += ["", "--primary key--"]
-            elif f['name'] in self.schema.get('primaryKey', []):
-                default_values += ["", "--composite key--"]
+                # Specify whether the field contributes to a key of some sort
+                if f['name'] == self.schema.get('primaryKey', ""):
+                    info_values += ["", "--primary key--"]
+                elif f['name'] in self.schema.get('primaryKey', []):
+                    info_values += ["", "--composite key--"]
 
             # Insert sample data, or else the conditions assembled above
             data[f['name']] = [f['name']]+map(str, f.get(
                 'example_values',
-                default_values
+                info_values
             ))
 
         template = pd.DataFrame.from_dict(data, orient='index').transpose()

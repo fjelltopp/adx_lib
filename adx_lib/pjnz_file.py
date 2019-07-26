@@ -1,5 +1,5 @@
-import rpy2.robjects.packages as rpackages
-from rpy2.robjects import r, pandas2ri
+from rpy2.robjects import r, pandas2ri, packages
+from rpy2.rinterface import NALogicalType
 import pandas
 import numpy
 import zipfile
@@ -8,13 +8,13 @@ import re
 import logging
 
 # Setup R packages to import the data
-utils = rpackages.importr("utils")
-if not rpackages.isinstalled('devtools'):
+utils = packages.importr("utils")
+if not packages.isinstalled('devtools'):
     utils.install_packages('devtools')
-    rpackages.importr("devtools")
-if not rpackages.isinstalled('specio'):
+    packages.importr("devtools")
+if not packages.isinstalled('specio'):
     r['install_github']('mrc-ide/specio')
-rpackages.importr("specio")
+packages.importr("specio")
 pandas2ri.activate()
 
 
@@ -38,6 +38,7 @@ class PJNZFile():
         self.pjnz_file = zipfile.PyZipFile(fpath)
         self.epp_data = {}
         self.dp_tables = {}
+        self.epp('subpops')  # This calculates self.epidemic_type
         if country:
             self.country = country
         else:
@@ -76,7 +77,8 @@ class PJNZFile():
                 'hhs'
             ],
             "read_epp_subpops": [
-                'subpops'
+                'subpops',
+                'turnover'
             ]
         }
 
@@ -117,20 +119,34 @@ class PJNZFile():
         # Combines data for each group into one complete data set.
         def read_epp_subpops():
             epp_subpops = r['read_epp_subpops'](self.fpath)
-            complete_data = {}
+            pops_data = {}
+            turnover_data = {}
+            self.epidemic_type = r['attr'](epp_subpops, 'epidemicType')[0]
 
             for group in epp_subpops.rx2('subpops').names:
-                try:
-                    data_frame = r2df(epp_subpops.rx2('subpops').rx2(group))
-                    data_frame['Group'] = group
-                    complete_data[group] = data_frame
-                except TypeError:
-                    pass
+                # Get the population data
+                data_frame = r2df(epp_subpops.rx2('subpops').rx2(group))
+                data_frame['Group'] = group
+                pops_data[group] = data_frame
 
-            if complete_data.values():
-                self.epp_data['subpops'] = pandas.concat(complete_data.values())
+                # Get the turnover data
+                duration = r['attr'](
+                    epp_subpops.rx2('subpops').rx2(group),
+                    'duration'
+                )[0]
+                if type(duration) is NALogicalType:
+                    duration = numpy.NaN
+                turnover_data[group] = pandas.DataFrame({group: duration}, index=['Duration'])
+
+            if pops_data.values():
+                self.epp_data['subpops'] = pandas.concat(pops_data.values())
             else:
                 self.epp_data['subpops'] = None
+
+            if turnover_data.values():
+                self.epp_data['turnover'] = pandas.concat(turnover_data.values(), axis='columns')
+            else:
+                self.epp_data['turnover'] = None
 
         # Only import if we havn't already done so.
         if self.epp_data.get(table, None) is None:

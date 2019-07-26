@@ -1,6 +1,5 @@
 from collections import OrderedDict
 from schemed_table import SchemedTable
-from rpy2.robjects import pandas2ri
 import pandas
 import numpy as np
 import pandas as pd
@@ -104,7 +103,10 @@ class TurnoverTable(SchemedTable):
         Imperial's SpecIO R Package.
         """
 
-        print(spectrum_file)
+        return build_spectrum_table(
+            spectrum_file,
+            self.schema
+        )
 
 
 class HHTable(SchemedTable):
@@ -125,27 +127,38 @@ class ConcPrevalenceTable(SchemedTable):
 
     def create_table(self, spectrum_file):
         """
-        Conc Prevelance table is taken from the XML file, and loaded through
-        Imperial's SpecIO R Package.
+        ANC Prevelance table is taken from the XML file, and loaded through
+        Imperial's SpecIO R Package.  It is quite different to the other tables
+        as data of different types from different tables are merged together
+        into a single table.  This means we first have to mannually build the
+        combined data source, before building the spectrum table.
         """
-        # Use the SpecIO package to extrac epp model data.
-        epp_data = spectrum_file.epp()
-        regions = epp_data.names
-        anc_prev = {}
+        # A generalised epidemic does not need this table filled in.
+        if spectrum_file.epidemic_type == 'generalized':
+            return self.create_template(info=False).iloc[1:]
+        else:
+            # Use the SpecIO package to extrac epp model data.
+            conc_prev = {
+                "prevalance": spectrum_file.epp('anc.prev'),
+                "N": spectrum_file.epp('anc.n')
+            }
 
-        # Utility function to convert an R matrix into a pandas dataframe
-        def _r2df(r_matrix):
-            dataframe = pandas2ri.ri2py_dataframe(r_matrix)
-            dataframe.columns = r_matrix.colnames
-            dataframe.index = r_matrix.rownames
-            return dataframe
+            # Filtering out empty values and merging data types into one table
+            for key, value in conc_prev.iteritems():
+                    value['Type'] = key
+            conc_prev = pandas.concat(conc_prev.values())
+            conc_prev['Site'] = conc_prev.index
 
-        # Data is stored by region in the SpecIO outputs.
-        for region in regions:
-            data_types = epp_data.rx2(region).names
-            print(data_types)
-            print(_r2df(epp_data.rx2(region).rx2('ancrtcens')))
-            print(epp_data.rx2(region).rx2('anc.used'))
+            # Many values have been set to some huge negative figure.
+            # Assume these should be empty?
+            tmp = conc_prev._get_numeric_data()
+            tmp[tmp < 0] = np.NaN
+
+            spectrum_file.epp_data['conc_prev'] = conc_prev
+            return build_spectrum_table(
+                spectrum_file,
+                self.schema
+            )
 
 
 class ANCPrevalenceTable(SchemedTable):
@@ -157,33 +170,43 @@ class ANCPrevalenceTable(SchemedTable):
         as data of different types from different tables are merged together
         into a single table.  This means we first have to mannually build the
         combined data source, before building the spectrum table.
+
+        NOTE: Spectrum File can be either stratified by regions or by sub-populations.
+        Can't be both. This is dependant on whether the epidemic is concentrated
+        or generalised.  If stratified by regions, this table should be populated
+        otherwise the conc_prev table should be populated.
         """
-        # Use the SpecIO package to extrac epp model data.
-        combined_anc = {
-            "ANC-SS (%)": spectrum_file.epp('anc.prev'),
-            "ANC-SS (N)": spectrum_file.epp('anc.n'),
-            "ANC-RT (%)": spectrum_file.epp('ancrtsite.prev'),
-            "ANC-RT (N)": spectrum_file.epp('ancrtsite.n')
-        }
 
-        # Filtering out empty values and merging data types into one table
-        combined_anc = {k: v for k, v in combined_anc.items() if v is not None}
-        for key, value in combined_anc.iteritems():
-                value['Type'] = key
-        combined_anc = pandas.concat(combined_anc.values())
-        combined_anc['Site'] = combined_anc.index
+        # A concentrated epidemic does not need this table filled in.
+        if spectrum_file.epidemic_type == 'concentrated':
+            return self.create_template(info=False).iloc[1:]
+        else:
+            # Use the SpecIO package to extrac epp model data.
+            combined_anc = {
+                "ANC-SS (%)": spectrum_file.epp('anc.prev'),
+                "ANC-SS (N)": spectrum_file.epp('anc.n'),
+                "ANC-RT (%)": spectrum_file.epp('ancrtsite.prev'),
+                "ANC-RT (N)": spectrum_file.epp('ancrtsite.n')
+            }
 
-        # Many values have been set to some huge negative figure.
-        # Assume these should be empty?
-        tmp = combined_anc._get_numeric_data()
-        tmp[tmp < 0] = np.NaN
+            # Filtering out empty values and merging data types into one table
+            combined_anc = {k: v for k, v in combined_anc.items() if v is not None}
+            for key, value in combined_anc.iteritems():
+                    value['Type'] = key
+            combined_anc = pandas.concat(combined_anc.values())
+            combined_anc['Site'] = combined_anc.index
 
-        spectrum_file.epp_data['combined_anc'] = combined_anc
+            # Many values have been set to some huge negative figure.
+            # Assume these should be empty?
+            tmp = combined_anc._get_numeric_data()
+            tmp[tmp < 0] = np.NaN
 
-        return build_spectrum_table(
-            spectrum_file,
-            self.schema
-        )
+            spectrum_file.epp_data['combined_anc'] = combined_anc
+
+            return build_spectrum_table(
+                spectrum_file,
+                self.schema
+            )
 
 
 class ANCTestingTable(SchemedTable):
