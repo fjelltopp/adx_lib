@@ -4,10 +4,9 @@ import pandas
 import numpy
 import zipfile
 import io
-import re
 import logging
 
-# Setup R packages to import the data
+# Setup R packages used by SpecIO to extract data.
 utils = packages.importr("utils")
 if not packages.isinstalled('devtools'):
     utils.install_packages('devtools')
@@ -244,49 +243,6 @@ class PJNZFile():
 
         return dp_table
 
-    def extract_surv_data(self):
-        """
-        The ANC Sentinel Surveillance and Routine Testing data are stored in
-        the surv file.  This breaks the surv data down in to sub dataframes
-        using the =========== and ---------- dividers.
-        """
-        # Get entire surv.csv sheet with rows and columns indexed by numbers
-        surv_sheet = self.dataframes.get(self.fname + '_surv.csv')
-        if surv_sheet is None:
-            raise FileNotFoundError("surv.csv sheet not found")
-        surv_sheet.columns = range(0, len(surv_sheet.columns))
-
-        tags = "|".join(PJNZFile.surv_file_datasheets)
-        dividing_rows = surv_sheet.index[
-            surv_sheet[0].str.contains(tags, na=False, regex=True)
-        ].tolist()
-        dataframes = {}
-        for index, row in enumerate(dividing_rows):
-            start_row = row+1
-            try:
-                end_row = dividing_rows[index+1]
-            except IndexError:
-                break
-            table = surv_sheet.copy().iloc[start_row:end_row, 0:]
-            dataframes[surv_sheet.iloc[row, 0][:-5]] = table
-
-        # # Divide up the data into multiple smaller data frames
-        # tags = "=============================|------------------------------"
-        # dividing_rows = surv_sheet.index[
-        #     surv_sheet[0].str.contains(tags, na=False, regex=True)
-        # ].tolist()
-        # dataframes = []
-        # for index, row in enumerate(dividing_rows):
-        #     start_row = row+1
-        #     try:
-        #         end_row = dividing_rows[index+1]
-        #     except IndexError:
-        #         break
-        #     table = surv_sheet.copy().iloc[start_row:end_row, 0:]
-        #     dataframes.append(table)
-
-        return dataframes
-
     @staticmethod
     def _add_delimiters(file_object, delimiter=','):
         """
@@ -311,7 +267,8 @@ class PJNZFile():
 
     @staticmethod
     def _convert_to_type(df, type):
-        df = df.fillna(-9999)
+        # Do an NaN safe data type conversion
+        df = df.fillna(-99999999)
         df = df.astype(type)
-        df = df.replace(-9999, numpy.nan)
+        df = df.replace(-99999999, numpy.nan)
         return df
