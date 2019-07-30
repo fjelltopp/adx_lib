@@ -88,15 +88,16 @@ class SchemedTable:
         This function should be overriden by sub-classes. It should create
         a table from the schema and populate it with data from a Spectrum File.
         """
-        return self.create_template()
+        return self.create_template(info=False).iloc[1:]
 
-    def create_csv_table(self, spectrum_file, fname=None):
+    def create_csv_table(self, spectrum_file, fname=None, directory='.'):
         """
         Creates a csv table from the GoodTables schema.
         """
         if fname is None:
             fname = self.fname + "_" + spectrum_file.country + ".csv"
         table = self.create_table(spectrum_file)
-        file = open(fname, "w")
-        file.write(unicode(table.to_csv(header=True, index=False)))
+        file = open(directory+"/"+fname, "w")
+        csv_table = table.to_csv(header=True, index=False, encoding='utf-8')
+        file.write(unicode(csv_table, encoding='utf-8'))
         file.close()

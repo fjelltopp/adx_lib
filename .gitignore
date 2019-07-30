@@ -88,5 +88,8 @@ ENV/
 # Rope project settings
 .ropeproject
 
+adx_lib/test/**/*.csv
 adx_lib/test/*.csv
+*.zip
+*.PJNZ
 *#

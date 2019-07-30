@@ -34,28 +34,33 @@ def build_spectrum_table(spectrum_file, schema, index=None, **kwargs):
         new_table = OrderedDict()
         for field in schema['fields']:
             if field.get('spectrum_file_key', False):
-
                 # Fill row in with spectrum data
                 try:
                     # IMPORTANT - We evaluate a snippet of code from the JSON file
                     data_series = list(eval(field['spectrum_file_key']))
-                except Exception:
+                    new_table[field['name']] = data_series
+
+                except Exception as e:
                     logging.error(
                         "Failed to evaluate " + field['name'] +
-                        " spectrum_file_key: " + field['spectrum_file_key']
+                        " spectrum_file_key: " + field['spectrum_file_key'] +
+                        " => " + str(e)
                     )
-                    raise
-                new_table[field['name']] = data_series
+                    new_table[field['name']] = []
 
             else:
                 # If no spectrum_file_key given, then leave series empty
                 new_table[field['name']] = []
 
         # Fill in empty series with NAN (must match other series length)
-        max_length = max([len(x) for x in new_table.values()])
+        if kwargs.get('columns'):
+            length = len(kwargs['columns'])
+        else:
+            length = max([len(x) for x in new_table.values()])
+
         for key, value in new_table.iteritems():
             if len(value) == 0:
-                new_table[key] = [np.NaN]*max_length
+                new_table[key] = [np.NaN]*length
 
         new_table = pd.DataFrame.from_dict(
             new_table,
@@ -102,11 +107,14 @@ class TurnoverTable(SchemedTable):
         Conc Prevelance table is taken from the XML file, and loaded through
         Imperial's SpecIO R Package.
         """
-
-        return build_spectrum_table(
-            spectrum_file,
-            self.schema
-        )
+        # A generalised epidemic does not need this table filled in.
+        if spectrum_file.epidemic_type == 'generalized':
+            return self.create_template(info=False).iloc[1:]
+        else:
+            return build_spectrum_table(
+                spectrum_file,
+                self.schema
+            )
 
 
 class HHTable(SchemedTable):
@@ -139,9 +147,16 @@ class ConcPrevalenceTable(SchemedTable):
         else:
             # Use the SpecIO package to extrac epp model data.
             conc_prev = {
-                "prevalance": spectrum_file.epp('anc.prev'),
+                "prevalence": spectrum_file.epp('anc.prev'),
                 "N": spectrum_file.epp('anc.n')
             }
+
+            # Subset just the percentage columns and multiply by 100
+            # This gives percent rather than fraction.
+            conc_prev["prevalence"] \
+                .loc[:, conc_prev["prevalence"].columns != 'Group'] \
+                = conc_prev["prevalence"] \
+                .loc[:, conc_prev["prevalence"].columns != 'Group']*100
 
             # Filtering out empty values and merging data types into one table
             for key, value in conc_prev.iteritems():
@@ -189,6 +204,17 @@ class ANCPrevalenceTable(SchemedTable):
                 "ANC-RT (N)": spectrum_file.epp('ancrtsite.n')
             }
 
+            # Subset just the percentage columns and multiply by 100
+            # This gives percent rather than fraction.
+            combined_anc["ANC-SS (%)"] \
+                .loc[:, combined_anc["ANC-SS (%)"].columns != 'Group'] \
+                = combined_anc["ANC-SS (%)"] \
+                .loc[:, combined_anc["ANC-SS (%)"].columns != 'Group']*100
+            combined_anc["ANC-RT (%)"] \
+                .loc[:, combined_anc["ANC-RT (%)"].columns != 'Group'] \
+                = combined_anc["ANC-RT (%)"] \
+                .loc[:, combined_anc["ANC-RT (%)"].columns != 'Group']*100
+
             # Filtering out empty values and merging data types into one table
             combined_anc = {k: v for k, v in combined_anc.items() if v is not None}
             for key, value in combined_anc.iteritems():
@@ -215,7 +241,7 @@ class ANCTestingTable(SchemedTable):
 
         spectrum_file.dp_tables = {
             "ANCTestingValues MV": {
-                "type": int
+                "type": float
             }
         }
 
@@ -250,7 +276,7 @@ class PMTCTTable(SchemedTable):
 
         spectrum_file.dp_tables = {
             "ARVRegimen MV2": {
-                "type": int,
+                "type": float,
                 "columns": ["Drop"] + spectrum_file.default_columns
             }
         }
@@ -273,16 +299,16 @@ class ARTTable(SchemedTable):
     def create_table(self, spectrum_file):
 
         spectrum_file.dp_tables = {
-            "HAARTBySex MV": {"type": int},
+            "HAARTBySex MV": {"type": float},
             "MedianCD4 MV": {"type": float},
-            "PercLostFollowup MV": {"type": int},
+            "PercLostFollowup MV": {"type": float},
             "CD4ThreshHoldAdults MV": {"type": int},
             "ChildARTCalc MV2": {"type": float},
             "ChildTreatInputs MV3": {"type": float},
-            "PercLostFollowupChild MV": {"type": int},
+            "PercLostFollowupChild MV": {"type": float},
             "CD4ThreshHold MV": {"type": int},
             "ChildNeedPMTCT MV": {"type": float},
-            "ChildOnPMTCT MV": {"type": int},
+            "ChildOnPMTCT MV": {"type": float},
             "NumNewARTPats MV": {"type": float},
             "MedCD4CountInit MV": {"type": int}
         }

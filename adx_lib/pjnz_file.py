@@ -106,10 +106,11 @@ class PJNZFile():
                 for group in epp_data.names:
                     try:
                         data_frame = r2df(epp_data.rx2(group).rx2(table_name))
+                        data_frame = data_frame.astype(float)
                         data_frame['Group'] = group
                         complete_data[group] = data_frame
                     except TypeError:
-                        pass
+                        pass  # Only get the data if it exists
 
                 if complete_data.values():
                     self.epp_data[table_name] = pandas.concat(complete_data.values())
@@ -124,19 +125,25 @@ class PJNZFile():
             self.epidemic_type = r['attr'](epp_subpops, 'epidemicType')[0]
 
             for group in epp_subpops.rx2('subpops').names:
-                # Get the population data
-                data_frame = r2df(epp_subpops.rx2('subpops').rx2(group))
-                data_frame['Group'] = group
-                pops_data[group] = data_frame
+                try:
+                    # Get the population data
+                    data_frame = r2df(epp_subpops.rx2('subpops').rx2(group))
+                    data_frame['Group'] = group
+                    pops_data[group] = data_frame
+                except TypeError:
+                    pass  # Only get the data if it exists
 
-                # Get the turnover data
-                duration = r['attr'](
-                    epp_subpops.rx2('subpops').rx2(group),
-                    'duration'
-                )[0]
-                if type(duration) is NALogicalType:
-                    duration = numpy.NaN
-                turnover_data[group] = pandas.DataFrame({group: duration}, index=['Duration'])
+                try:
+                    # Get the turnover data
+                    duration = r['attr'](
+                        epp_subpops.rx2('subpops').rx2(group),
+                        'duration'
+                    )[0]
+                    if type(duration) is NALogicalType:
+                        duration = numpy.NaN
+                    turnover_data[group] = pandas.DataFrame({group: duration}, index=['Duration'])
+                except TypeError:
+                    pass  # Only get the data if it exists
 
             if pops_data.values():
                 self.epp_data['subpops'] = pandas.concat(pops_data.values())
@@ -305,6 +312,6 @@ class PJNZFile():
     @staticmethod
     def _convert_to_type(df, type):
         df = df.fillna(-9999)
-        df = df.astype(type, errors='ignore')
+        df = df.astype(type)
         df = df.replace(-9999, numpy.nan)
         return df

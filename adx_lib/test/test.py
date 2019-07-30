@@ -4,6 +4,9 @@ from rpy2.robjects.packages import importr
 from rpy2.robjects.vectors import StrVector
 from rpy2.robjects import r
 import numpy
+import json
+import importlib
+import os
 
 """
 This script is used to test the files in this repo.
@@ -12,9 +15,49 @@ IT SHOULD (OF COURSE) BECOME A PROPER TEST SUIT.
 """
 
 schemas_directory = '../../../ckanext-unaids/ckanext/unaids/validation_table_schemas/'
+spectrum_schema_path = '../../../ckanext-unaids/ckanext/unaids/package_schemas/spectrum.json'
 pjnz_directory = '../../../'
 
-pjnz = PJNZFile(pjnz_directory+'Mauritius_2018_shadow.PJNZ')
+pjnz = PJNZFile(pjnz_directory+'Botswana_ 2019.PJNZ')
+
+
+def create_spectrum_package(pjnz_path, directory='.'):
+    print("\n===" + directory + "===")
+    pjnz = PJNZFile(pjnz_path)
+    with open(spectrum_schema_path) as json_file:
+        schema = json.load(json_file)
+        if not os.path.exists(directory):
+            os.makedirs(directory)
+        for resource in schema['resources']:
+            print(resource['name'] + " - " + resource.get('python_class', 'No Python Class'))
+
+            validator_schema = filter(
+                lambda f: f.get('field_name', '') == 'validator_schema',
+                resource['resource_fields']
+            )[0]['field_value']
+
+            class_name = resource['python_class'].split('.')[-1]
+            module_name = '.'.join(resource['python_class'].split('.')[:-1])
+            imported_module = importlib.import_module(module_name)
+            imported_class = getattr(imported_module, class_name)
+            schemed_table = imported_class(schemas_directory + validator_schema + '.json')
+
+            schemed_table.create_csv_table(pjnz, directory=directory)
+
+
+spectrum_files = {
+    'Burkina_Faso_2019': 'Burkina_Faso_2019_05_03_Final.PJNZ',
+    'Botswana_2019': 'Botswana_ 2019.PJNZ',
+    'Malawi_2019': 'Malawi_2019_v22.PJNZ',
+    'Mauritius_2018': 'Mauritius_2018_shadow.PJNZ',
+    'Cameroon_2019': 'Cameroon_2019_05_06_Final.PJNZ',
+    #'Senegal_2018': 'Senegal_2018_final_v5_63.pjnz',
+    #'Niger_2018': 'Niger_2018_final_v5_63.PJNZ',
+    #'Mauritanie_2018': 'Mauritanie_2018_final_v5_65.PJNZ'
+}
+
+for k, v in spectrum_files.iteritems():
+    create_spectrum_package(pjnz_directory+v, k)
 
 # subpops = r['read_epp_subpops'](pjnz_directory+'Mauritius_2018_shadow.PJNZ').rx2('subpops')
 # pops = subpops.names
@@ -54,7 +97,7 @@ pjnz = PJNZFile(pjnz_directory+'Mauritius_2018_shadow.PJNZ')
 # spectrum_tables.ANCPrevalenceTable(
 #     schemas_directory + 'spectrum_anc_prev.json'
 # ).create_csv_table(pjnz)
-
+#
 # spectrum_tables.ConcPrevalenceTable(
 #     schemas_directory + 'spectrum_conc_prev.json'
 # ).create_csv_table(pjnz)
